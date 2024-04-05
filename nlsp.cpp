@@ -13,10 +13,10 @@ class Nlsp : public Gecode::Space
 protected:
   int num_variables;
   int num_leaves;
-  Gecode::IntVarArray nodes;
+  Gecode::IntVarArray leaves;
 
 public:
-  Nlsp(vector<int> y, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), nodes(*this, num_variables * num_leaves, 0, 1)
+  Nlsp(vector<int> y, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), leaves(*this, num_variables * num_leaves, 0, 1)
   {
     std::cout << "Nlsp constructor, num_leaves: " << num_leaves << " num_variables: " << num_variables << std::endl;
 
@@ -72,13 +72,13 @@ public:
       }
     }
 
-    Gecode::branch(*this, nodes, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
-    // Gecode::branch(*this, nodes, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
+    Gecode::branch(*this, leaves, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
+    // Gecode::branch(*this, leaves, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
   }
 
   Gecode::IntVar get_value(int row, int column) const
   {
-    return nodes[row * num_variables + column];
+    return leaves[row * num_variables + column];
   }
 
   vector<int> Binary(int x, int c)
@@ -108,7 +108,7 @@ public:
 
   Nlsp(Nlsp &s) : Gecode::Space(s)
   {
-    nodes.update(*this, s.nodes);
+    leaves.update(*this, s.leaves);
     num_leaves = s.num_leaves;
     num_variables = s.num_variables;
   }
@@ -149,14 +149,22 @@ int main()
   The total number of nodes (N) can be calculated using the formula:
   N=2l−1
   */
-  int l = 6;
-  Nlsp *m = new Nlsp(v, max_xs, l);
-  Gecode::DFS<Nlsp> e(m);
-  delete m;
-  if (Nlsp *s = e.next())
+  int l = 2;
+  while (true)
   {
-    s->print();
-    delete s;
+    Nlsp *m = new Nlsp(v, max_xs, l);
+    Gecode::DFS<Nlsp> e(m);
+    delete m;
+    if (Nlsp *s = e.next())
+    {
+      s->print();
+      delete s;
+      break; // Found a solution, exit the loop
+    }
+    else
+    {
+      l++; // Increment l if no feasible solution found
+    }
   }
   return 0;
 }
