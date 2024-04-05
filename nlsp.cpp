@@ -13,10 +13,10 @@ class Nlsp : public Gecode::Space
 protected:
   int num_variables;
   int num_leaves;
-  Gecode::IntVarArray m_l;
+  Gecode::IntVarArray nodes;
 
 public:
-  Nlsp(vector<int> y, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), m_l(*this, num_variables * num_leaves, 0, 1)
+  Nlsp(vector<int> y, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), nodes(*this, num_variables * num_leaves, 0, 1)
   {
     std::cout << "Nlsp constructor, num_leaves: " << num_leaves << " num_variables: " << num_variables << std::endl;
 
@@ -72,13 +72,13 @@ public:
       }
     }
 
-    Gecode::branch(*this, m_l, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
-    // Gecode::branch(*this, m_l, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
+    Gecode::branch(*this, nodes, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
+    // Gecode::branch(*this, nodes, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
   }
 
   Gecode::IntVar get_value(int row, int column) const
   {
-    return m_l[row * num_variables + column];
+    return nodes[row * num_variables + column];
   }
 
   vector<int> Binary(int x, int c)
@@ -108,7 +108,9 @@ public:
 
   Nlsp(Nlsp &s) : Gecode::Space(s)
   {
-    m_l.update(*this, s.m_l);
+    nodes.update(*this, s.nodes);
+    num_leaves = s.num_leaves;
+    num_variables = s.num_variables;
   }
 
   virtual Gecode::Space *copy()
@@ -118,32 +120,18 @@ public:
 
   void print(void) const
   {
-    cout << "Nlsp print" << endl;
-    for (int i = 0; i < m_l.size(); i += 3)
+    for (int j = 0; j < num_leaves; j++)
     {
-      int elem1 = m_l[i].val();
-      int elem2 = m_l[i + 1].val();
-      int elem3 = m_l[i + 2].val();
-      if (elem1 == 0 && elem2 == 0)
+      int elem = 0;
+      for (int k = 0; k < num_variables; k++)
       {
-        cout << "0 ";
+        Gecode::IntVar value = get_value(j, k);
+        if (value.val() == 1)
+        {
+          elem = k;
+        }
       }
-      else if (elem1 == 1 && elem2 == 0 && elem3 == 0)
-      {
-        cout << "1 ";
-      }
-      else if (elem1 == 0 && elem2 == 1 && elem3 == 0)
-      {
-        cout << "2 ";
-      }
-      else if (elem1 == 0 && elem2 == 0 && elem3 == 1)
-      {
-        cout << "3 ";
-      }
-      else
-      {
-        cout << "x ";
-      }
+      cout << elem << " ";
     }
     cout << endl;
   }
@@ -161,21 +149,14 @@ int main()
   The total number of nodes (N) can be calculated using the formula:
   N=2l−1
   */
-  int l = 2;
+  int l = 6;
   Nlsp *m = new Nlsp(v, max_xs, l);
   Gecode::DFS<Nlsp> e(m);
   delete m;
-  Nlsp *s = e.next();
-  while (s == NULL)
+  if (Nlsp *s = e.next())
   {
-    l++;
-    Nlsp *m = new Nlsp(v, max_xs, l);
-    Gecode::DFS<Nlsp> _e(m);
-    delete m;
-    s = _e.next();
+    s->print();
+    delete s;
   }
-  s->print();
-  s = e.next();
-  delete s;
   return 0;
 }
