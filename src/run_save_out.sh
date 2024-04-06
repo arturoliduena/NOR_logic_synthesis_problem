@@ -11,7 +11,10 @@ cleanup() {
 trap cleanup SIGINT
 
 for instance in ../instances/nlsp_*.inp; do
-    echo "Running instance $instance"
-    gtimeout 60s ./nlsp < "$instance" | ./checker
+    output_file="../out/$(basename "$instance" .inp).out"
+    gtimeout 60s ./nlsp < "$instance" > "$output_file"
+    if [ ! -s "$output_file" ]; then
+        rm "$output_file"
+    fi
     echo "................"
 done

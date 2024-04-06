@@ -13,13 +13,12 @@ class Nlsp : public Gecode::Space
 protected:
   int num_variables;
   int num_leaves;
+  vector<pair<vector<int>, int>> truth_table;
   Gecode::IntVarArray leaves;
 
 public:
-  Nlsp(vector<pair<vector<int>, int>> truth_table, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), leaves(*this, num_variables * num_leaves, 0, 1)
+  Nlsp(vector<pair<vector<int>, int>> truth_table, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), truth_table(truth_table), leaves(*this, num_variables * num_leaves, 0, 1)
   {
-    cerr << "Nlsp constructor, num_leaves: " << num_leaves << " num_variables: " << num_variables << endl;
-
     for (int _idx = 0; _idx < truth_table.size(); _idx++)
     {
       vector<int> xs = truth_table[_idx].first;
@@ -90,6 +89,7 @@ public:
     leaves.update(*this, s.leaves);
     num_leaves = s.num_leaves;
     num_variables = s.num_variables;
+    truth_table = s.truth_table;
   }
 
   virtual Gecode::Space *copy()
@@ -99,21 +99,44 @@ public:
 
   void print() const
   {
+    cout << num_variables << endl;
+    for (int _idx = 0; _idx < truth_table.size(); _idx++)
+    {
+      int y = truth_table[_idx].second;
+      cout << y << endl;
+    }
+    // [-1, -1, -1, 0, 0, 0, 0] -> total number of nodes = N = 2l−1
+    int num_nodes = 2 * num_leaves - 1;
+    // Depth of a complete binary tree can be calculated using logarithmic formula -> depth = Log base 2 of (number of nodes)
+    int d = log2(num_nodes); // Depth of the circuit
+    //  Number of NOR nodes -> NOR-nodes = (2l−1)-l = l - 1 (aka size)
+    int s = num_leaves - 1; // Number of NOR nodes in the circuit (size)
+
+    cout << d << " " << s << endl;
+    for (int i = 0; i < s; i++)
+    {
+      // <id> <code> <left> <right>
+      int id = i + 1;
+      int left_id = (i * 2 + 1) + 1;  // Left child: (current index * 2) + 1
+      int right_id = (i * 2 + 2) + 1; // Right child: (current index * 2) + 2
+      cout << id << " -1"
+           << " " << left_id << " " << right_id << endl;
+    }
     for (int i = 0; i < num_leaves; i++)
     {
       int elem = 0;
       for (int j = 0; j < num_variables; j++)
       {
         Gecode::IntVar value = get_value(i, j);
-        // cout << value.val() << " ";
         if (value.val() == 1)
         {
           elem = j + 1;
         }
       }
-      cout << elem << " ";
+      // <id> <code> <left> <right>
+      int id = num_leaves + i;
+      cout << id << " " << elem << " 0 0 " << endl;
     }
-    cout << endl;
   }
 };
 
