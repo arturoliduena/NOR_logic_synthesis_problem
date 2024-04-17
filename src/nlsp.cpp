@@ -12,84 +12,114 @@ class Nlsp : public Gecode::Space
 {
 protected:
   int num_variables;
-  int num_leaves;
+  int depth;
+  int num_nodes;
   vector<pair<vector<int>, int>> truth_table;
-  Gecode::IntVarArray leaves;
+  Gecode::IntVarArray nodes;
+  // node is_NOR {1: NOR, 0: variable}
+  Gecode::BoolVarArray is_NOR;
 
 public:
-  Nlsp(vector<pair<vector<int>, int>> truth_table, int num_variables, int num_leaves) : num_variables(num_variables), num_leaves(num_leaves), truth_table(truth_table), leaves(*this, num_variables * num_leaves, 0, 1)
+  Nlsp(vector<pair<vector<int>, int>> truth_table, int num_variables, int depth) : num_variables(num_variables), depth(depth), truth_table(truth_table), num_nodes(pow(2, depth + 1) - 1), nodes(*this, num_nodes * num_variables, 0, 1), is_NOR(*this, num_nodes, 0, 1)
   {
+    // root node should be a NOR node, so the type of the node should be 1
+    Gecode::rel(*this, is_NOR[0] == 1);
+
+    for (int i = 0; i < num_nodes; i++)
+    {
+      Gecode::IntVarArgs vars(*this, num_variables, 0, 1);
+      for (int j = 0; j < num_variables; j++)
+      {
+        vars[j] = get_value(i, j);
+      }
+
+      Gecode::IntVar sum_vars(*this, 0, num_variables);
+      Gecode::linear(*this, vars, Gecode::IRT_EQ, sum_vars);
+      Gecode::rel(*this, sum_vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
+      // Gecode::rel(*this, (is_NOR[i] == 1) >> (sum_vars == 0));
+      // Gecode::rel(*this, (types[i] == 1) << (sum_vars > 0));
+    }
+
+    for (int idx = 1; idx < num_nodes; idx++)
+    {
+      // Parent: (current index - 1) // 2 (round down)
+      int left_idx = idx * 2 + 1;  // Left child: (current index * 2) + 1
+      int right_idx = idx * 2 + 2; // Right child: (current index * 2) + 2
+
+      // Enforce that the current node is the NOR of its children
+      if (left_idx < num_nodes && right_idx < num_nodes)
+      {
+        // Gecode::rel(*this, is_NOR[idx], Gecode::IRT_EQ, 1);
+      }
+      else
+      {
+        // If the node is a leaf node cant't be a NOR node
+        Gecode::rel(*this, is_NOR[idx], Gecode::IRT_NQ, 1);
+      }
+    }
+
     for (int _idx = 0; _idx < truth_table.size(); _idx++)
     {
       vector<int> xs = truth_table[_idx].first;
       int y = truth_table[_idx].second;
 
-      // Result will be between 0 and 1 inclusive
-      Gecode::IntVarArray results(*this, num_leaves, 0, 1);
+      // node value will be between 0 and 1 inclusive
+      Gecode::IntVarArray values(*this, num_nodes, 0, 1);
+
       // Define integer coefficients
-      // Gecode::IntArgs coefficients({xs[0], xs[1], ..., xs[num_variables-1]});
       Gecode::IntArgs coefficients(num_variables);
       for (int idx = 0; idx < num_variables; idx++)
       {
         coefficients[idx] = xs[idx];
       }
 
-      for (int i = 0; i < num_leaves; i++)
+      for (int i = 0; i < num_nodes; i++)
       {
-        Gecode::IntVarArgs values(*this, num_variables, 0, 1);
+        Gecode::IntVarArgs vars(*this, num_variables, 0, 1);
         for (int j = 0; j < num_variables; j++)
         {
-          values[j] = get_value(i, j);
+          vars[j] = get_value(i, j);
         }
         // Define integer expression representing c1 * x_1 + c2 * x_2
-        // Perform the operation: c1 * x1 + c2 * x2
-        Gecode::linear(*this, coefficients, values, Gecode::IRT_EQ, results[i]);
+        Gecode::linear(*this, coefficients, vars, Gecode::IRT_EQ, values[i]);
       }
 
-      // N=2l−1 = 2*4-1 = 7 -> NOR-nodes = 7-4 = 3
-      // [-1, -1, -1, 0, 0, 0, 0]
-      // a complete binary tree represented for a heap
-      Gecode::BoolVarArray nodes(*this, 2 * num_leaves - 1, 0, 1);
+      // a binary tree represented for a heap
+      Gecode::BoolVarArray tree(*this, num_nodes, 0, 1);
 
-      for (int _i = nodes.size() - num_leaves; _i < nodes.size(); _i++)
-      {
-        int value_idx = abs(nodes.size() - num_leaves - _i);
-        Gecode::rel(*this, nodes[_i] == (results[value_idx] > 0));
-      }
+      Gecode::rel(*this, tree[0], Gecode::IRT_EQ, y);
 
-      Gecode::rel(*this, nodes[0], Gecode::IRT_EQ, y);
-
-      for (int idx = 0; idx < nodes.size() - num_leaves; idx++)
+      for (int idx = 0; idx < tree.size(); idx++)
       {
         // Parent: (current index - 1) // 2 (round down)
         int left_idx = idx * 2 + 1;  // Left child: (current index * 2) + 1
         int right_idx = idx * 2 + 2; // Right child: (current index * 2) + 2
 
-        // Enforce that the current node is the NOR of its children
-        Gecode::rel(*this, nodes[idx] == !(nodes[left_idx] || nodes[right_idx]));
+        if (left_idx < tree.size() && right_idx < tree.size())
+        {
+          Gecode::rel(*this, (tree[idx] == !(tree[left_idx] || tree[right_idx])) << (is_NOR[idx] == 1));
+        }
+        Gecode::rel(*this, (tree[idx] == values[idx]) << (is_NOR[idx] == 0));
       }
     }
 
-    Gecode::branch(*this, leaves, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
-    // Gecode::branch(*this, leaves, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
+    Gecode::branch(*this, nodes, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
+    Gecode::branch(*this, is_NOR, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
   }
 
   Gecode::IntVar get_value(int row, int column) const
   {
-    return leaves[row * num_variables + column];
-  }
-
-  int NOR(int x1, int x2)
-  {
-    return !(x1 || x2);
+    return nodes[row * num_variables + column];
   }
 
   Nlsp(Nlsp &s) : Gecode::Space(s)
   {
-    leaves.update(*this, s.leaves);
-    num_leaves = s.num_leaves;
+    nodes.update(*this, s.nodes);
+    is_NOR.update(*this, s.is_NOR);
+    num_nodes = s.num_nodes;
     num_variables = s.num_variables;
     truth_table = s.truth_table;
+    depth = s.depth;
   }
 
   virtual Gecode::Space *copy()
@@ -105,38 +135,64 @@ public:
       int y = truth_table[_idx].second;
       cout << y << endl;
     }
-    // [-1, -1, -1, 0, 0, 0, 0] -> total number of nodes = N = 2l−1
-    int num_nodes = 2 * num_leaves - 1;
-    // Depth of a complete binary tree can be calculated using logarithmic formula -> depth = Log base 2 of (number of nodes)
-    int d = log2(num_nodes); // Depth of the circuit
-    //  Number of NOR nodes -> NOR-nodes = (2l−1)-l = l - 1 (aka size)
-    int s = num_leaves - 1; // Number of NOR nodes in the circuit (size)
+    int s = 5; // Number of NOR nodes in the circuit (size)
 
-    cout << d << " " << s << endl;
-    for (int i = 0; i < s; i++)
+    cout << depth << " " << s << endl;
+    // for (int i = 0; i < s; i++)
+    // {
+    //   // <id> <code> <left> <right>
+    //   int id = i + 1;
+    //   int left_id = (i * 2 + 1) + 1;  // Left child: (current index * 2) + 1
+    //   int right_id = (i * 2 + 2) + 1; // Right child: (current index * 2) + 2
+    //   cout << id << " -1"
+    //        << " " << left_id << " " << right_id << endl;
+    // }
+    // for (int i = 0; i < num_nodes; i++)
+    // {
+    //   int elem = 0;
+    //   for (int j = 0; j < num_variables; j++)
+    //   {
+    //     Gecode::IntVar value = get_value(i, j);
+    //     if (value.val() == 1)
+    //     {
+    //       elem = j + 1;
+    //     }
+    //   }
+    //   // <id> <code> <left> <right>
+    //   int id = num_nodes + i;
+    //   cout << id << " " << elem << " 0 0 " << endl;
+    // }
+    cout << "________________________________" << endl;
+    for (int i = 0; i < num_nodes; i++)
     {
-      // <id> <code> <left> <right>
-      int id = i + 1;
-      int left_id = (i * 2 + 1) + 1;  // Left child: (current index * 2) + 1
-      int right_id = (i * 2 + 2) + 1; // Right child: (current index * 2) + 2
-      cout << id << " -1"
-           << " " << left_id << " " << right_id << endl;
-    }
-    for (int i = 0; i < num_leaves; i++)
-    {
-      int elem = 0;
+      // int elem = 0;
       for (int j = 0; j < num_variables; j++)
       {
         Gecode::IntVar value = get_value(i, j);
-        if (value.val() == 1)
-        {
-          elem = j + 1;
-        }
+        cout << value.val() << " ";
+        // if (value.val() == 1)
+        // {
+        //   elem = j + 1;
+        // }
       }
+      cout << endl;
       // <id> <code> <left> <right>
-      int id = num_leaves + i;
-      cout << id << " " << elem << " 0 0 " << endl;
+      // int id = num_nodes + i;
+      // cout << id << " " << elem << " 0 0 " << endl;
     }
+    cout << "______________types__________________" << endl;
+    for (int i = 0; i < num_nodes; i++)
+    {
+      if (is_NOR[i].assigned())
+      {
+        cout << is_NOR[i].val() << " ";
+      }
+      else
+      {
+        cout << "- ";
+      }
+    }
+    cout << endl;
   }
 };
 
@@ -179,22 +235,35 @@ int main()
     truth_table.push_back({Binary(i, vars), _temp});
   }
 
-  int l = 2;
-  while (true)
+  int depth = 3;
+  Nlsp *m = new Nlsp(truth_table, vars, depth);
+  Gecode::DFS<Nlsp> e(m);
+  delete m;
+  if (Nlsp *s = e.next())
   {
-    Nlsp *m = new Nlsp(truth_table, vars, l);
-    Gecode::DFS<Nlsp> e(m);
-    delete m;
-    if (Nlsp *s = e.next())
-    {
-      s->print();
-      delete s;
-      break; // Found a solution, exit the loop
-    }
-    else
-    {
-      l++; // Increment l if no feasible solution found
-    }
+    s->print();
+    delete s;
   }
+  else
+  {
+    cout << "No solution found" << endl;
+  }
+
+  // while (true)
+  // {
+  //   Nlsp *m = new Nlsp(truth_table, vars, depth);
+  //   Gecode::DFS<Nlsp> e(m);
+  //   delete m;
+  //   if (Nlsp *s = e.next())
+  //   {
+  //     s->print();
+  //     delete s;
+  //     break; // Found a solution, exit the loop
+  //   }
+  //   else
+  //   {
+  //     depth++; // Increment depth if no feasible solution found
+  //   }
+  // }
   return 0;
 }

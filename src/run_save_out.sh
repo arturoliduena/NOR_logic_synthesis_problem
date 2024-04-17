@@ -10,7 +10,6 @@ cleanup() {
 # Trap SIGINT signal (Ctrl+C)
 trap cleanup SIGINT
 
-
 # Initialize counters
 num=0
 error_num=0
