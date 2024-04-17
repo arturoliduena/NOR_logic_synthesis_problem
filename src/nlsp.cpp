@@ -38,23 +38,20 @@ public:
       Gecode::rel(*this, sum_vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
       // Gecode::rel(*this, (is_NOR[i] == 1) >> (sum_vars == 0));
       // Gecode::rel(*this, (types[i] == 1) << (sum_vars > 0));
-    }
 
-    for (int idx = 1; idx < num_nodes; idx++)
-    {
       // Parent: (current index - 1) // 2 (round down)
-      int left_idx = idx * 2 + 1;  // Left child: (current index * 2) + 1
-      int right_idx = idx * 2 + 2; // Right child: (current index * 2) + 2
+      int left_idx = i * 2 + 1;  // Left child: (current index * 2) + 1
+      int right_idx = i * 2 + 2; // Right child: (current index * 2) + 2
 
       // Enforce that the current node is the NOR of its children
       if (left_idx < num_nodes && right_idx < num_nodes)
       {
-        // Gecode::rel(*this, is_NOR[idx], Gecode::IRT_EQ, 1);
+        // Gecode::rel(*this, is_NOR[i], Gecode::IRT_EQ, 1);
       }
       else
       {
         // If the node is a leaf node cant't be a NOR node
-        Gecode::rel(*this, is_NOR[idx], Gecode::IRT_NQ, 1);
+        Gecode::rel(*this, is_NOR[i], Gecode::IRT_NQ, 1);
       }
     }
 
@@ -127,60 +124,23 @@ public:
     return new Nlsp(*this);
   }
 
-  void print() const
+  void print_matrix() const
   {
-    cout << num_variables << endl;
-    for (int _idx = 0; _idx < truth_table.size(); _idx++)
-    {
-      int y = truth_table[_idx].second;
-      cout << y << endl;
-    }
-    int s = 5; // Number of NOR nodes in the circuit (size)
-
-    cout << depth << " " << s << endl;
-    // for (int i = 0; i < s; i++)
-    // {
-    //   // <id> <code> <left> <right>
-    //   int id = i + 1;
-    //   int left_id = (i * 2 + 1) + 1;  // Left child: (current index * 2) + 1
-    //   int right_id = (i * 2 + 2) + 1; // Right child: (current index * 2) + 2
-    //   cout << id << " -1"
-    //        << " " << left_id << " " << right_id << endl;
-    // }
-    // for (int i = 0; i < num_nodes; i++)
-    // {
-    //   int elem = 0;
-    //   for (int j = 0; j < num_variables; j++)
-    //   {
-    //     Gecode::IntVar value = get_value(i, j);
-    //     if (value.val() == 1)
-    //     {
-    //       elem = j + 1;
-    //     }
-    //   }
-    //   // <id> <code> <left> <right>
-    //   int id = num_nodes + i;
-    //   cout << id << " " << elem << " 0 0 " << endl;
-    // }
-    cout << "________________________________" << endl;
+    cout << "_____________MATRIX___________________" << endl;
     for (int i = 0; i < num_nodes; i++)
     {
-      // int elem = 0;
       for (int j = 0; j < num_variables; j++)
       {
         Gecode::IntVar value = get_value(i, j);
         cout << value.val() << " ";
-        // if (value.val() == 1)
-        // {
-        //   elem = j + 1;
-        // }
       }
       cout << endl;
-      // <id> <code> <left> <right>
-      // int id = num_nodes + i;
-      // cout << id << " " << elem << " 0 0 " << endl;
     }
-    cout << "______________types__________________" << endl;
+  }
+
+  void print_node_types() const
+  {
+    cout << "______________node-types__________________" << endl;
     for (int i = 0; i < num_nodes; i++)
     {
       if (is_NOR[i].assigned())
@@ -193,6 +153,57 @@ public:
       }
     }
     cout << endl;
+  }
+
+  void print() const
+  {
+    cout << num_variables << endl;
+    for (int idx = 0; idx < truth_table.size(); idx++)
+    {
+      int y = truth_table[idx].second;
+      cout << y << endl;
+    }
+    int s = 0; // Number of NOR nodes in the circuit (size)
+    for (int i = 0; i < num_nodes; i++)
+    {
+      if (is_NOR[i].val() == 1)
+      {
+        s++;
+      }
+    }
+    cout << depth << " " << s << endl;
+
+    for (int i = 0; i < num_nodes; i++)
+    {
+      // <id> <code> <left> <right>
+      int id = i + 1;
+
+      if (is_NOR[i].val() == 1)
+      {
+        int left_id = (i * 2 + 1) + 1;  // Left child: (current index * 2) + 1
+        int right_id = (i * 2 + 2) + 1; // Right child: (current index * 2) + 2
+        cout << id << " -1"
+             << " " << left_id << " " << right_id << endl;
+      }
+      else
+      {
+        int elem = 0;
+        // Parent: (current index - 1) // 2 (round down)
+        int const parent_idx = (i - 1) / 2;
+        if (is_NOR[parent_idx].val() == 1)
+        {
+          for (int j = 0; j < num_variables; j++)
+          {
+            Gecode::IntVar value = get_value(i, j);
+            if (value.val() == 1)
+            {
+              elem = j + 1;
+            }
+          }
+          cout << id << " " << elem << " 0 0 " << endl;
+        }
+      }
+    }
   }
 };
 
@@ -212,9 +223,6 @@ vector<int> Binary(int num, int base)
 
 int main()
 {
-  // vector<int> v({0, 0, 0, 1});
-  // int vars = 2;
-  // vector<int> v({0, 1, 1, 0, 0, 1, 1, 0});
   int vars;
   cin >> vars;
   int rows = pow(2, vars);
@@ -225,9 +233,6 @@ int main()
   N=2l−1
   */
   vector<pair<vector<int>, int>> truth_table;
-  // bitset<2> binary(i);
-  // Convert the integer to binary
-
   for (int i = 0; i < rows; i++)
   {
     int _temp;
@@ -235,35 +240,22 @@ int main()
     truth_table.push_back({Binary(i, vars), _temp});
   }
 
-  int depth = 3;
-  Nlsp *m = new Nlsp(truth_table, vars, depth);
-  Gecode::DFS<Nlsp> e(m);
-  delete m;
-  if (Nlsp *s = e.next())
+  int depth = 1;
+  while (true)
   {
-    s->print();
-    delete s;
+    Nlsp *m = new Nlsp(truth_table, vars, depth);
+    Gecode::DFS<Nlsp> e(m);
+    delete m;
+    if (Nlsp *s = e.next())
+    {
+      s->print();
+      delete s;
+      break; // Found a solution, exit the loop
+    }
+    else
+    {
+      depth++; // Increment depth if no feasible solution found
+    }
   }
-  else
-  {
-    cout << "No solution found" << endl;
-  }
-
-  // while (true)
-  // {
-  //   Nlsp *m = new Nlsp(truth_table, vars, depth);
-  //   Gecode::DFS<Nlsp> e(m);
-  //   delete m;
-  //   if (Nlsp *s = e.next())
-  //   {
-  //     s->print();
-  //     delete s;
-  //     break; // Found a solution, exit the loop
-  //   }
-  //   else
-  //   {
-  //     depth++; // Increment depth if no feasible solution found
-  //   }
-  // }
   return 0;
 }
