@@ -22,9 +22,6 @@ protected:
 public:
   Nlsp(vector<pair<vector<int>, int>> truth_table, int num_variables, int depth) : num_variables(num_variables), depth(depth), truth_table(truth_table), num_nodes(pow(2, depth + 1) - 1), nodes(*this, num_nodes * num_variables, 0, 1), is_NOR(*this, num_nodes, 0, 1)
   {
-    // root node should be a NOR node, so the type of the node should be 1
-    Gecode::rel(*this, is_NOR[0] == 1);
-
     for (int i = 0; i < num_nodes; i++)
     {
       Gecode::IntVarArgs vars(*this, num_variables, 0, 1);
@@ -35,6 +32,7 @@ public:
 
       Gecode::IntVar sum_vars(*this, 0, num_variables);
       Gecode::linear(*this, vars, Gecode::IRT_EQ, sum_vars);
+      Gecode::linear(*this, vars, Gecode::IRT_LQ, 1);
       Gecode::rel(*this, sum_vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
       // Gecode::rel(*this, (is_NOR[i] == 1) >> (sum_vars == 0));
       // Gecode::rel(*this, (types[i] == 1) << (sum_vars > 0));
@@ -122,6 +120,20 @@ public:
   virtual Gecode::Space *copy()
   {
     return new Nlsp(*this);
+  }
+
+  virtual void constrain(const Space &_b)
+  {
+    const Nlsp &b = static_cast<const Nlsp &>(_b);
+    int s = 0; // Number of NOR nodes in the circuit (size)
+    for (int i = 0; i < num_nodes; i++)
+    {
+      if (b.is_NOR[i].val() == 1)
+      {
+        s++;
+      }
+    }
+    Gecode::linear(*this, is_NOR, Gecode::IRT_LE, s);
   }
 
   void print_matrix() const
@@ -248,6 +260,13 @@ int main()
     delete m;
     if (Nlsp *s = e.next())
     {
+      Nlsp *_s = e.next();
+      while (_s != NULL)
+      {
+        delete s;
+        s = _s;
+        _s = e.next();
+      }
       s->print();
       delete s;
       break; // Found a solution, exit the loop
