@@ -34,19 +34,12 @@ public:
       Gecode::linear(*this, vars, Gecode::IRT_EQ, sum_vars);
       Gecode::linear(*this, vars, Gecode::IRT_LQ, 1);
       Gecode::rel(*this, sum_vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
-      // Gecode::rel(*this, (is_NOR[i] == 1) >> (sum_vars == 0));
-      // Gecode::rel(*this, (types[i] == 1) << (sum_vars > 0));
 
       // Parent: (current index - 1) // 2 (round down)
       int left_idx = i * 2 + 1;  // Left child: (current index * 2) + 1
       int right_idx = i * 2 + 2; // Right child: (current index * 2) + 2
 
-      // Enforce that the current node is the NOR of its children
-      if (left_idx < num_nodes && right_idx < num_nodes)
-      {
-        // Gecode::rel(*this, is_NOR[i], Gecode::IRT_EQ, 1);
-      }
-      else
+      if (!(left_idx < num_nodes && right_idx < num_nodes))
       {
         // If the node is a leaf node cant't be a NOR node
         Gecode::rel(*this, is_NOR[i], Gecode::IRT_NQ, 1);
@@ -223,7 +216,6 @@ vector<int> Binary(int num, int base)
 {
   vector<int> v;
   // Binary representation of num with base bits
-  // Start from the leftmost bit (most significant bit)
   for (int i = base - 1; i >= 0; i--)
   {
     // Use bitwise AND operation to check if the i-th bit is set
@@ -238,12 +230,6 @@ int main()
   int vars;
   cin >> vars;
   int rows = pow(2, vars);
-  /*
-  In a complete binary tree, where every level is completely filled except possibly for the last level (which is often used as the basis for a heap), the number of nodes can be calculated based on the number of leaves.
-  For a binary tree with l leaves:
-  The total number of nodes (N) can be calculated using the formula:
-  N=2l−1
-  */
   vector<pair<vector<int>, int>> truth_table;
   for (int i = 0; i < rows; i++)
   {
@@ -252,7 +238,7 @@ int main()
     truth_table.push_back({Binary(i, vars), _temp});
   }
 
-  int depth = 1;
+  int depth = 0;
   while (true)
   {
     Nlsp *m = new Nlsp(truth_table, vars, depth);
