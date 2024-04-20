@@ -15,7 +15,7 @@ protected:
   int depth;
   int num_nodes;
   vector<pair<vector<int>, int>> truth_table;
-  Gecode::IntVarArray nodes;
+  Gecode::BoolVarArray nodes;
   // node is_NOR {1: NOR, 0: variable}
   Gecode::BoolVarArray is_NOR;
 
@@ -24,16 +24,14 @@ public:
   {
     for (int i = 0; i < num_nodes; i++)
     {
-      Gecode::IntVarArgs vars(*this, num_variables, 0, 1);
+      Gecode::BoolVarArgs vars(*this, num_variables, 0, 1);
       for (int j = 0; j < num_variables; j++)
       {
         vars[j] = get_value(i, j);
       }
 
-      Gecode::IntVar sum_vars(*this, 0, num_variables);
-      Gecode::linear(*this, vars, Gecode::IRT_EQ, sum_vars);
       Gecode::linear(*this, vars, Gecode::IRT_LQ, 1);
-      Gecode::rel(*this, sum_vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
+      Gecode::linear(*this, vars, Gecode::IRT_EQ, 0, Gecode::imp(is_NOR[i]));
 
       // Parent: (current index - 1) // 2 (round down)
       int left_idx = i * 2 + 1;  // Left child: (current index * 2) + 1
@@ -63,7 +61,7 @@ public:
 
       for (int i = 0; i < num_nodes; i++)
       {
-        Gecode::IntVarArgs vars(*this, num_variables, 0, 1);
+        Gecode::BoolVarArgs vars(*this, num_variables, 0, 1);
         for (int j = 0; j < num_variables; j++)
         {
           vars[j] = get_value(i, j);
@@ -83,21 +81,32 @@ public:
         int left_idx = idx * 2 + 1;  // Left child: (current index * 2) + 1
         int right_idx = idx * 2 + 2; // Right child: (current index * 2) + 2
 
+        Gecode::BoolVar value(*this, 0, 1);
+        Gecode::channel(*this, values[idx], value);
         if (left_idx < tree.size() && right_idx < tree.size())
         {
-          Gecode::rel(*this, (tree[idx] == !(tree[left_idx] || tree[right_idx])) << (is_NOR[idx] == 1));
+          Gecode::ite(*this, is_NOR[idx], NOR(tree[left_idx], tree[right_idx]), value, tree[idx]);
         }
-        Gecode::rel(*this, (tree[idx] == values[idx]) << (is_NOR[idx] == 0));
+        else
+        {
+          Gecode::rel(*this, tree[idx], Gecode::IRT_EQ, value);
+        }
       }
     }
 
-    Gecode::branch(*this, nodes, Gecode::INT_VAR_SIZE_MIN(), Gecode::INT_VAL_MIN());
+    Gecode::branch(*this, nodes, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
     Gecode::branch(*this, is_NOR, Gecode::BOOL_VAR_NONE(), Gecode::BOOL_VAL_MAX());
   }
 
-  Gecode::IntVar get_value(int row, int column) const
+  Gecode::BoolVar get_value(int row, int column) const
   {
     return nodes[row * num_variables + column];
+  }
+
+  Gecode::BoolVar NOR(Gecode::BoolVar x1, Gecode::BoolVar x2)
+  {
+    Gecode::BoolVar result = Gecode::expr(*this, !(x1 || x2));
+    return result;
   }
 
   Nlsp(Nlsp &s) : Gecode::Space(s)
@@ -136,7 +145,7 @@ public:
     {
       for (int j = 0; j < num_variables; j++)
       {
-        Gecode::IntVar value = get_value(i, j);
+        Gecode::BoolVar value = get_value(i, j);
         cout << value.val() << " ";
       }
       cout << endl;
@@ -199,7 +208,7 @@ public:
         {
           for (int j = 0; j < num_variables; j++)
           {
-            Gecode::IntVar value = get_value(i, j);
+            Gecode::BoolVar value = get_value(i, j);
             if (value.val() == 1)
             {
               elem = j + 1;
